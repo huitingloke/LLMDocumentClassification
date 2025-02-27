@@ -1,6 +1,7 @@
 import gradio as gr
+import zipfile
 import os
-from pypdf import PdfReader
+from PyPDF2 import PdfReader
 # from docx import Document
 import pandas as pd
 
@@ -31,37 +32,33 @@ def upload_to_classify_preview_document(file, notes):
     if file is None:
         return "❌ No file uploaded.", "", gr.update(visible=True), gr.update(visible=True)
 
-    file_name = os.path.basename(file.name).lower()  # Extract just the file name
-    status_message = f"✅ File '{file_name}' uploaded successfully!\n\n📌 Notes: {notes if notes else 'No additional notes'}"
-    
+    file_names=[]
+    status_message =""
+    for f in file:
+        file_name = os.path.basename(f.name).lower() 
+        file_names.append(file_name)
+        status_message += f"✅ File '{file_name}' has been uploaded successfully!\n\n"
+    status_message = status_message + f"📌 Comments: {notes if notes else 'No additional notes'}"
+
+
     try:
-        # PDF Preview
-        if file_name.endswith(".pdf"):
-            with open(file.name, "rb") as f:
-                reader = PdfReader(f)
-                text = reader.pages[0].extract_text() if reader.pages else "Empty PDF"
-            return status_message, text[:500], gr.update(visible=False), gr.update(visible=True)
-
-        # DOCX Preview (Uncomment if dependencies are available)
-        # elif file_name.endswith(".docx"):
-        #     doc = Document(file.name)
-        #     text = "\n".join([para.text for para in doc.paragraphs])
-        #     return status_message, text[:500] if text else "Empty DOCX file", text[:500], gr.update(visible=False), gr.update(visible=True)
-
-        # CSV Preview
-        elif file_name.endswith(".csv"):
-            df = pd.read_csv(file.name, nrows=5)  # Read first 5 rows
-            return status_message, df.to_string(index=False), text[:500], gr.update(visible=False), gr.update(visible=True)
-
-        # Excel (XLSX) Preview
-        elif file_name.endswith(".xlsx"):
-            df = pd.read_excel(file.name, engine="openpyxl", nrows=5)
-            return status_message, df.to_string(index=False), text[:500], gr.update(visible=False), gr.update(visible=True)
-
-        return status_message, "Unsupported file type."
-    
+        preview_text =""
+        for i in range(len(file_names)):          
+            if file_names[i].endswith(".pdf"):
+                with open(file[i].name, "rb") as f:
+                    reader = PdfReader(file[i])
+                    text = reader.pages[0].extract_text() if reader.pages else "Empty PDF"
+                    first_500_char = text[:500]
+                    preview_text += f"{file_names[i]}:\n{first_500_char}\n{'-' * 50}\n"
+            
+            else:
+                return status_message, "Unsupported file type."
+            
+        return status_message, preview_text, gr.update(visible=False), gr.update(visible=True)
+  
     except Exception as e:
         return status_message, f"Error processing file: {e}"
+
 
 with gr.Blocks(css="""
     @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
@@ -161,7 +158,7 @@ with gr.Blocks(css="""
 
     # Top Bar
     with gr.Row(elem_classes="top-bar"):
-        gr.Markdown("**NOMURA**", elem_classes="logo")
+        gr.Markdown("**CL_Lexcelerate**", elem_classes="logo")
 
         # Profile section in the top-right corner
         gr.HTML("""
@@ -202,10 +199,7 @@ with gr.Blocks(css="""
 
             with gr.Column(scale=4):
                 gr.Markdown("### Upload your Document(s) here")
-                with gr.Row():
-                    file_uploader = gr.File(label="Upload your document", type="filepath")
-                    # Gradio does not support direct folder uploads, upload the ZIP file instead
-                    zip_uploader = gr.File(label="Upload a ZIP file (for multiple files)", type="filepath", file_types=[".zip"])
+                file_uploader = gr.File(label="Upload your document", type="filepath", file_count="multiple")
                 chosen_model = gr.Dropdown(label="Choose a model", choices=["deepseek-r1:7b", "llama3.1", "phi4:14b"],  value="deepseek-r1:7b", interactive=True)
                 notes = gr.Textbox(placeholder="Write any comments you have about your document(s) here.", label="Comments")       
                 output_text = gr.Textbox(label="Upload Status", interactive=False)
